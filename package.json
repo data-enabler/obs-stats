@@ -1,0 +1,21 @@
+{
+  "name": "obs-stats",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "humanize-plus": "^1.8.2",
+    "obs-websocket-js": "^5.0.6",
+    "preact": "^10.27.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
+    "@types/humanize-plus": "^1.8.2",
+    "typescript": "~5.8.3",
+    "vite": "^7.1.2",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}
