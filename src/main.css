@@ -99,23 +99,20 @@ body {
   color: inherit;
 }
 .lag--warning {
-  color: #c08000;
+  color: #fb3;
 }
 .lag--critical {
-  color: #c00000;
+  color: #f33;
 }
 
-@keyframes frames-normal {
-  to {
-    background-color: transparent;
-  }
-}
-
-.frames--normal {
-  animation: frames-normal 1s infinite;
-}
 .frames--dropped {
-  background-color: #c0000040;
+  animation: frames-dropped var(--poll-interval) ease-out infinite;
+}
+
+@keyframes frames-dropped {
+  from {
+    background-color: #400;
+  }
 }
 
 .sr-only {

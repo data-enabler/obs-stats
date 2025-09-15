@@ -72,9 +72,9 @@ const outputNameMapping: Record<string, string> = {
   'virtualcam_output': 'Virtual Cam',
 };
 
-// get password from query params
 const urlParams = new URLSearchParams(window.location.search);
 const password = urlParams.get('password') || '';
+document.body.style.setProperty('--poll-interval', `${POLLING_INTERVAL}ms`);
 
 const obs = new OBSWebSocket();
 await obs.connect('ws://127.0.0.1:4455', password);
@@ -93,7 +93,7 @@ function App({ obs }: { obs: OBSWebSocket }) {
 
 function ObsStats({
   stats,
-  // prevStats,
+  prevStats,
 }: {
   stats: ObsStatus,
   prevStats: ObsStatus,
@@ -111,6 +111,8 @@ function ObsStats({
     counterText: encodeFramesText,
     counterClass: encodeFramesClass,
   } = frameCounter(stats.outputTotalFrames, stats.outputSkippedFrames);
+  const renderFramesDropped = stats.renderSkippedFrames > prevStats.renderSkippedFrames;
+  const encodeFramesDropped = stats.outputSkippedFrames > prevStats.outputSkippedFrames;
   return (
     <div class="stats">
       <section class="stats__section" aria-label="Resource Usage">
@@ -132,12 +134,12 @@ function ObsStats({
           <span class="stat__name">Frametime:</span> <span class="stat__value">{frametime}</span>
         </div>
         <div class="stats__group">
-          <div class="stat">
+          <div class={`stat ${renderFramesDropped ? 'frames--dropped' : ''}`}>
             <span class="stat__name">Render frames missed:</span>
             {' '}
             <span class={`stat__value ${renderFramesClass}`}>{renderFramesText}</span>
           </div>
-          <div class="stat">
+          <div class={`stat ${encodeFramesDropped ? 'frames--dropped' : ''}`}>
             <span class="stat__name">Encoding frames missed:</span>
             {' '}
             <span class={`stat__value ${encodeFramesClass}`}>{encodeFramesText}</span>
