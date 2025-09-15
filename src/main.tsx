@@ -74,6 +74,8 @@ const outputNameMapping: Record<string, string> = {
 
 const urlParams = new URLSearchParams(window.location.search);
 const password = urlParams.get('password') || '';
+const theme = urlParams.get('theme') || 'default';
+document.documentElement.classList.add(`theme-${theme}`);
 document.body.style.setProperty('--poll-interval', `${POLLING_INTERVAL}ms`);
 
 const obs = new OBSWebSocket();

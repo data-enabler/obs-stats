@@ -1,6 +1,21 @@
 :root {
   font-family: system-ui, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+}
+
+:root, :root.theme-default {
   color-scheme: dark;
+  --color-bg: hsl(226, 13%, 18%);
+  --color-bg2: hsl(226, 13%, 13%);
+  --color-fg: white;
+}
+
+:root.theme-classic {
+  color-scheme: dark;
+  --color-bg: hsl(300, 1%, 23%);
+  --color-bg2: hsl(300, 1%, 12%);
+  --color-fg: white;
 }
 
 body {
@@ -34,7 +49,7 @@ body {
 }
 
 .stats__group {
-  flex: inherit;
+  flex: 1 1 auto;
   display: inherit;
   flex-flow: inherit;
   gap: inherit;
@@ -44,7 +59,7 @@ body {
   flex: 1 0 0;
   padding: 0.1em 1em;
   white-space: nowrap;
-  background: #0003;
+  background-color: var(--color-bg2);
   border-inline: 1px solid black;
 }
 
@@ -63,6 +78,10 @@ body {
 
 .outputs tbody {
   padding: 0 0.5rem;
+}
+
+.outputs tr {
+  background-color: var(--color-bg2);
 }
 
 .outputs td {
