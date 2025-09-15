@@ -73,13 +73,14 @@ const outputNameMapping: Record<string, string> = {
 };
 
 const urlParams = new URLSearchParams(window.location.search);
+const address = urlParams.get('address') || 'localhost:4455';
 const password = urlParams.get('password') || '';
 const theme = urlParams.get('theme') || 'default';
 document.documentElement.classList.add(`theme-${theme}`);
 document.body.style.setProperty('--poll-interval', `${POLLING_INTERVAL}ms`);
 
 const obs = new OBSWebSocket();
-await obs.connect('ws://127.0.0.1:4455', password);
+await obs.connect(`ws://${address}`, password);
 
 render((<App obs={obs} />), document.body);
 
