@@ -198,7 +198,6 @@ function OutputsTable({
       || { name: o.name, status: nullOutputStatus };
     return (<OutputStats stats={o} prevStats={prevStatus} />);
   });
-  // const rowSplit = Math.ceil(rows.length/2);
 
   return <div class="outputs" ref={containerRef}>
     <table>
@@ -273,6 +272,9 @@ function useStatus(obs: OBSWebSocket): State {
   const [prevStatus, setPrevStatus] = useState<Status>(nullStatus);
   useEffect(() => {
     async function fetchStats() {
+      if (outputNames.current.length === 0) {
+        outputNames.current = parseOutputNames(await obs.call('GetOutputList'));
+      }
       const outputRequests: RequestBatchRequest<'GetOutputStatus'>[] = outputNames.current
         .map(name => ({
           'requestType': 'GetOutputStatus',
@@ -301,7 +303,7 @@ function useStatus(obs: OBSWebSocket): State {
         setPrevStatus(previous);
         return state;
       });
-      outputNames.current = outputListResp.responseData.outputs.map(o => o.outputName as string);
+      outputNames.current = parseOutputNames(outputListResp.responseData);
     }
     fetchStats();
     const interval = setInterval(fetchStats, POLLING_INTERVAL);
@@ -310,3 +312,10 @@ function useStatus(obs: OBSWebSocket): State {
   }, [obs]);
   return { status, prevStatus };
 }
+
+function parseOutputNames(
+  outputListResp: OBSResponseTypes['GetOutputList'],
+): string[] {
+  return outputListResp.outputs.map(o => o.outputName as string);
+}
+
