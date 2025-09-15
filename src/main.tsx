@@ -20,8 +20,8 @@ interface Status {
 };
 
 interface State {
-  status: Status;
-  prevStatus: Status;
+  status: Status | null;
+  prevStatus: Status | null;
 };
 
 // interface FrameOffset {
@@ -38,31 +38,18 @@ interface State {
 const THRESHOLD_WARNING = 0.01;
 const THRESHOLD_CRITICAL = 0.05;
 const POLLING_INTERVAL = 2000;
-const nullStatus: Status = {
-  stats: {
-    cpuUsage: 0,
-    memoryUsage: 0,
-    availableDiskSpace: 0,
-    activeFps: 0,
-    averageFrameRenderTime: 0,
-    renderSkippedFrames: 0,
-    renderTotalFrames: 0,
-    outputSkippedFrames: 0,
-    outputTotalFrames: 0,
-    webSocketSessionIncomingMessages: 0,
-    webSocketSessionOutgoingMessages: 0,
-  },
-  outputs: [],
-};
-const nullOutputStatus: OutputStatus = {
-  outputActive: false,
-  outputReconnecting: false,
-  outputTimecode: '00:00:00.000',
-  outputDuration: 0,
-  outputCongestion: 0,
-  outputBytes: 0,
+const nullObsStatus: ObsStatus = {
+  cpuUsage: 0,
+  memoryUsage: 0,
+  availableDiskSpace: 0,
+  activeFps: 0,
+  averageFrameRenderTime: 0,
+  renderSkippedFrames: 0,
+  renderTotalFrames: 0,
   outputSkippedFrames: 0,
   outputTotalFrames: 0,
+  webSocketSessionIncomingMessages: 0,
+  webSocketSessionOutgoingMessages: 0,
 };
 const outputNameMapping: Record<string, string> = {
   'simple_stream': 'Stream',
@@ -88,8 +75,8 @@ function App({ obs }: { obs: OBSWebSocket }) {
   const state = useStatus(obs);
   return (
     <>
-      <ObsStats stats={state.status.stats} prevStats={state.prevStatus.stats} />
-      <OutputsTable outputs={state.status.outputs} prevOutputs={state.prevStatus.outputs} />
+      <ObsStats stats={state.status?.stats || nullObsStatus} prevStats={state.prevStatus?.stats || null} />
+      <OutputsTable outputs={state.status?.outputs || []} prevOutputs={state.prevStatus?.outputs || []} />
     </>
   );
 }
@@ -99,7 +86,7 @@ function ObsStats({
   prevStats,
 }: {
   stats: ObsStatus,
-  prevStats: ObsStatus,
+  prevStats: ObsStatus | null,
 }) {
   const cpuUsage = `${stats.cpuUsage.toPrecision(2)}%`;
   const memoryUsage = fileSize(stats.memoryUsage * 1024 * 1024);
@@ -114,8 +101,8 @@ function ObsStats({
     counterText: encodeFramesText,
     counterClass: encodeFramesClass,
   } = frameCounter(stats.outputTotalFrames, stats.outputSkippedFrames);
-  const renderFramesDropped = stats.renderSkippedFrames > prevStats.renderSkippedFrames;
-  const encodeFramesDropped = stats.outputSkippedFrames > prevStats.outputSkippedFrames;
+  const renderFramesDropped = !!prevStats && stats.renderSkippedFrames > prevStats.renderSkippedFrames;
+  const encodeFramesDropped = !!prevStats && stats.outputSkippedFrames > prevStats.outputSkippedFrames;
   return (
     <div class="stats">
       <section class="stats__section" aria-label="Resource Usage">
@@ -194,8 +181,7 @@ function OutputsTable({
   }, [outputs.length]);
 
   const rows = outputs.map(o => {
-    const prevStatus = prevOutputs.find(p => p.name === o.name)
-      || { name: o.name, status: nullOutputStatus };
+    const prevStatus = prevOutputs.find(p => p.name === o.name) || null;
     return (<OutputStats stats={o} prevStats={prevStatus} />);
   });
 
@@ -225,18 +211,12 @@ function OutputsTable({
   </div>;
 }
 
-/**
- * @param {{
- *  status: Output,
- *  prevStatus: Output,
- * }} params
- */
 function OutputStats({
   stats,
   prevStats,
 }: {
   stats: Output,
-  prevStats: Output,
+  prevStats: Output | null,
 }) {
   const active = stats.status.outputActive;
   const reconnecting = stats.status.outputReconnecting;
@@ -245,9 +225,9 @@ function OutputStats({
   const name = outputNameMapping[stats.name] || stats.name;
   const { counterText, counterClass } = frameCounter(totalFrames, skippedFrames);
   const bytes = fileSize(stats.status.outputBytes);
-  const bitsSinceLastPoll = (stats.status.outputBytes - prevStats.status.outputBytes) * 8;
+  const bitsSinceLastPoll = (stats.status.outputBytes - (prevStats?.status.outputBytes || 0)) * 8;
   const bitrate = `${(bitsSinceLastPoll / POLLING_INTERVAL).toFixed(0)} kb\u2060/\u2060s`;
-  const droppedFrames = skippedFrames > prevStats.status.outputSkippedFrames;
+  const droppedFrames = !!prevStats && skippedFrames > prevStats.status.outputSkippedFrames;
   return (
     <tr class={`output ${droppedFrames ? 'frames--dropped' : 'frames--normal'}`}>
       <td class={`output__status ${active ? 'output--active' : 'output--inactive'}`}>
@@ -273,8 +253,8 @@ function useStatus(obs: OBSWebSocket): State {
   // We can't get the outputlist and status in one batch call, so keep track of
   // the output names from the last request
   const outputNames = useRef<string[]>([]);
-  const [status, setStatus] = useState<Status>(nullStatus);
-  const [prevStatus, setPrevStatus] = useState<Status>(nullStatus);
+  const [status, setStatus] = useState<Status | null>(null);
+  const [prevStatus, setPrevStatus] = useState<Status | null>(null);
   useEffect(() => {
     async function fetchStats() {
       if (outputNames.current.length === 0) {
