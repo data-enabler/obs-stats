@@ -168,22 +168,18 @@ function OutputsTable({
       return;
     }
     function resizeTable() {
-      console.log('Resizing table');
       if (!containerRef.current) {
         return;
       }
       const bodyElem = containerRef.current.querySelector('tbody');
       const rowElems = containerRef.current.querySelectorAll('tbody tr');
       const rowNum = rowElems.length;
-      console.log(`Row num: ${rowNum}`);
       if (!bodyElem || rowNum === 0) {
         setRowSplit(0);
         return;
       }
       const rowHeight = rowElems[0].clientHeight;
       const rowWidth = bodyElem.clientWidth;
-      console.log(`Row height: ${rowHeight}, container height: ${containerRef.current.clientHeight}`);
-      console.log(`Row width: ${rowWidth}, container width: ${containerRef.current.clientWidth}`);
       const isOverflowing = containerRef.current.clientHeight < rowHeight * rowNum;
       const canFitTwoCols = containerRef.current.clientWidth > rowWidth * 2;
       if (isOverflowing && canFitTwoCols) {
@@ -197,31 +193,35 @@ function OutputsTable({
     resizeObserver.observe(containerRef.current);
   }, [outputs.length]);
 
-  console.log(`Row split: ${rowSplit}`);
   const rows = outputs.map(o => {
     const prevStatus = prevOutputs.find(p => p.name === o.name)
       || { name: o.name, status: nullOutputStatus };
     return (<OutputStats stats={o} prevStats={prevStatus} />);
   });
 
+  const groups = rowSplit > 0
+    ? [rows.slice(0, rowSplit), rows.slice(rowSplit)]
+    : [rows];
+
   return <div class="outputs" ref={containerRef}>
-    <table>
-      <thead class="sr-only">
-        <tr>
-          <th scope="col">Status</th>
-          <th scope="col">Output</th>
-          <th scope="col">Frames (skipped/total)</th>
-          <th scope="col">Data Output</th>
-          <th scope="col">Bitrate</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rowSplit > 0 ? rows.slice(0, rowSplit) : rows}
-      </tbody>
-      { rowSplit > 0 && <tbody>
-        {rows.slice(rowSplit)}
-      </tbody> }
-    </table>
+    {groups.map((group) => (
+      <div class="outputs__table-container">
+        <table>
+          <thead class="sr-only">
+            <tr>
+              <th scope="col">Status</th>
+              <th scope="col">Output</th>
+              <th scope="col">Frames (skipped/total)</th>
+              <th scope="col">Data Output</th>
+              <th scope="col">Bitrate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {group}
+          </tbody>
+        </table>
+      </div>
+    ))}
   </div>;
 }
 
