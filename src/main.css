@@ -81,14 +81,21 @@ body {
   flex: 1 0 auto;
 }
 
-.disconnect {
+.disconnect, .reset {
   position: fixed;
-  left: 4px;
   bottom: 4px;
   width: 1.25em;
   height: 1.25em;
   box-sizing: content-box;
   padding: 0.25em;
+}
+
+.disconnect {
+  left: 4px;
+}
+
+.reset {
+  right: 4px;
 }
 
 .stats {

@@ -1,10 +1,11 @@
-import { render } from 'preact'
-import { useEffect, useRef, useState, type Dispatch, type StateUpdater } from 'preact/hooks';
+import { fileSize } from 'humanize-plus';
+import update from 'immutability-helper';
 import { OBSWebSocket } from 'obs-websocket-js';
 import type { OBSResponseTypes, RequestBatchRequest, ResponseMessage } from 'obs-websocket-js';
+import { render } from 'preact'
+import { useEffect, useRef, useState, type Dispatch, type StateUpdater } from 'preact/hooks';
 
 import './main.css'
-import { fileSize } from 'humanize-plus';
 
 type ObsStatus = OBSResponseTypes['GetStats'];
 type OutputStatus = OBSResponseTypes['GetOutputStatus'];
@@ -26,16 +27,16 @@ interface State {
 
 type ConnectionResult = [OBSWebSocket | null, string | null];
 
-// interface FrameOffset {
-//   renderSkippedFrames: number;
-//   renderTotalFrames: number;
-//   outputSkippedFrames: number;
-//   outputTotalFrames: number;
-//   outputs: Record<string, {
-//     outputSkippedFrames: number;
-//     outputTotalFrames: number;
-//   }>;
-// }
+interface FrameOffset {
+  renderSkippedFrames: number;
+  renderTotalFrames: number;
+  outputSkippedFrames: number;
+  outputTotalFrames: number;
+  outputs: Record<string, {
+    outputSkippedFrames: number;
+    outputTotalFrames: number;
+  }>;
+}
 
 const THRESHOLD_WARNING = 0.01;
 const THRESHOLD_CRITICAL = 0.05;
@@ -52,6 +53,13 @@ const nullObsStatus: ObsStatus = {
   outputTotalFrames: 0,
   webSocketSessionIncomingMessages: 0,
   webSocketSessionOutgoingMessages: 0,
+};
+const nullFrameOffset: FrameOffset = {
+  renderSkippedFrames: 0,
+  renderTotalFrames: 0,
+  outputSkippedFrames: 0,
+  outputTotalFrames: 0,
+  outputs: {},
 };
 const outputNameMapping: Record<string, string> = {
   'simple_stream': 'Stream',
@@ -219,15 +227,41 @@ function Dashboard({
   setObs: Dispatch<StateUpdater<OBSWebSocket | null>>,
 }) {
   const state = useStatus(obs);
+  const [offset, setOffset] = useState<FrameOffset>(nullFrameOffset);
+
   function disconnect() {
     obs.off('ConnectionClosed');
     obs.disconnect();
     setObs(null);
   }
+
+  function reset() {
+    setOffset({
+      renderSkippedFrames: state.status?.stats.renderSkippedFrames || 0,
+      renderTotalFrames: state.status?.stats.renderTotalFrames || 0,
+      outputSkippedFrames: state.status?.stats.outputSkippedFrames || 0,
+      outputTotalFrames: state.status?.stats.outputTotalFrames || 0,
+      outputs: Object.fromEntries((state.status?.outputs || []).map(o => [
+        o.name,
+        {
+          outputSkippedFrames: o.status.outputSkippedFrames,
+          outputTotalFrames: o.status.outputTotalFrames,
+        },
+      ])),
+    });
+  }
+
+  const {
+    adjustedStats,
+    adjustedPrevStats,
+    adjustedOutputs,
+    adjustedPrevOutputs,
+  } = applyStatOffset(state, offset, setOffset);
+
   return (
     <>
-      <ObsStats stats={state.status?.stats || nullObsStatus} prevStats={state.prevStatus?.stats || null} />
-      <OutputsTable outputs={state.status?.outputs || []} prevOutputs={state.prevStatus?.outputs || []} />
+      <ObsStats stats={adjustedStats} prevStats={adjustedPrevStats} />
+      <OutputsTable outputs={adjustedOutputs} prevOutputs={adjustedPrevOutputs} />
       <button
         class="disconnect"
         onClick={disconnect}
@@ -236,8 +270,114 @@ function Dashboard({
       >
         🔌
       </button>
+      <button
+        class="reset"
+        onClick={reset}
+        aria-label={'Reset'}
+        title={'Reset'}
+      >
+        🔄
+      </button>
     </>
   );
+}
+
+function applyStatOffset(
+  state: State,
+  offset: FrameOffset,
+  setOffset: Dispatch<StateUpdater<FrameOffset>>,
+): {
+  adjustedStats: ObsStatus,
+  adjustedPrevStats: ObsStatus | null,
+  adjustedOutputs: Output[],
+  adjustedPrevOutputs: Output[],
+} {
+  if (offset.renderTotalFrames &&
+    (state.status?.stats.renderTotalFrames || 0) < (state.prevStatus?.stats.renderTotalFrames || 0)) {
+    offset.renderSkippedFrames = 0;
+    offset.renderTotalFrames = 0;
+    setOffset(o => update(o, {
+      renderSkippedFrames: { $set: 0 },
+      renderTotalFrames: { $set: 0 },
+    }));
+  }
+  if (offset.outputTotalFrames &&
+    (state.status?.stats.outputTotalFrames || 0) < (state.prevStatus?.stats.outputTotalFrames || 0)) {
+    offset.outputSkippedFrames = 0;
+    offset.outputTotalFrames = 0;
+    setOffset(o => update(o, {
+      outputSkippedFrames: { $set: 0 },
+      outputTotalFrames: { $set: 0 },
+    }));
+  }
+  (state.status?.outputs || []).forEach(output => {
+    const prevOutput = state.prevStatus?.outputs.find(p => p.name === output.name) || null;
+    if (offset.outputs[output.name]?.outputTotalFrames &&
+      output.status.outputTotalFrames < (prevOutput?.status.outputTotalFrames || 0)) {
+      offset.outputs[output.name] = {
+        outputSkippedFrames: 0,
+        outputTotalFrames: 0,
+      };
+      setOffset(o => update(o, {
+        outputs: {
+          [output.name]: {
+            $set: {
+              outputSkippedFrames: 0,
+              outputTotalFrames: 0,
+            },
+          },
+        },
+      }));
+    }
+  });
+
+  const origStats = state.status?.stats || nullObsStatus;
+  const adjustedStats: ObsStatus = {
+    ...origStats,
+    renderSkippedFrames: origStats.renderSkippedFrames - offset.renderSkippedFrames,
+    renderTotalFrames: origStats.renderTotalFrames - offset.renderTotalFrames,
+    outputSkippedFrames: origStats.outputSkippedFrames - offset.outputSkippedFrames,
+    outputTotalFrames: origStats.outputTotalFrames - offset.outputTotalFrames,
+  };
+  const origPrevStats = state.prevStatus?.stats;
+  const adjustedPrevStats: ObsStatus | null = origPrevStats ? {
+    ...origPrevStats,
+    renderSkippedFrames: origPrevStats.renderSkippedFrames - offset.renderSkippedFrames,
+    renderTotalFrames: origPrevStats.renderTotalFrames - offset.renderTotalFrames,
+    outputSkippedFrames: origPrevStats.outputSkippedFrames - offset.outputSkippedFrames,
+    outputTotalFrames: origPrevStats.outputTotalFrames - offset.outputTotalFrames,
+  } : null;
+  const origOutputs = state.status?.outputs || [];
+  const adjustedOutputs: Output[] = origOutputs.map(o => {
+    const origOutputOffset = offset.outputs[o.name] || {
+      outputSkippedFrames: 0,
+      outputTotalFrames: 0,
+    };
+    return {
+      name: o.name,
+      status: {
+        ...o.status,
+        outputSkippedFrames: o.status.outputSkippedFrames - origOutputOffset.outputSkippedFrames,
+        outputTotalFrames: o.status.outputTotalFrames - origOutputOffset.outputTotalFrames,
+      },
+    };
+  });
+  const origPrevOutputs = state.prevStatus?.outputs || [];
+  const adjustedPrevOutputs: Output[] = origPrevOutputs.map(o => {
+    const origOutputOffset = offset.outputs[o.name] || {
+      outputSkippedFrames: 0,
+      outputTotalFrames: 0,
+    };
+    return {
+      name: o.name,
+      status: {
+        ...o.status,
+        outputSkippedFrames: o.status.outputSkippedFrames - origOutputOffset.outputSkippedFrames,
+        outputTotalFrames: o.status.outputTotalFrames - origOutputOffset.outputTotalFrames,
+      },
+    };
+  });
+  return { adjustedStats, adjustedPrevStats, adjustedOutputs, adjustedPrevOutputs };
 }
 
 function ObsStats({
@@ -384,7 +524,9 @@ function OutputStats({
   const name = outputNameMapping[stats.name] || stats.name;
   const { counterText, counterClass } = frameCounter(totalFrames, skippedFrames);
   const bytes = fileSize(stats.status.outputBytes);
-  const bitsSinceLastPoll = (stats.status.outputBytes - (prevStats?.status.outputBytes || 0)) * 8;
+  const bitsSinceLastPoll = (prevStats && prevStats.status.outputBytes <= stats.status.outputBytes)
+    ? (stats.status.outputBytes - prevStats.status.outputBytes) * 8
+    : 0;
   const bitrate = `${(bitsSinceLastPoll / POLLING_INTERVAL).toFixed(0)} kb\u2060/\u2060s`;
   const droppedFrames = !!prevStats && skippedFrames > prevStats.status.outputSkippedFrames;
   return (
