@@ -9,13 +9,14 @@
   --color-bg: hsl(226, 13%, 18%);
   --color-bg2: hsl(226, 13%, 13%);
   --color-fg: white;
+  --color-error: #f33;
+  --color-warning: #fb3;
 }
 
 :root.theme-classic {
   color-scheme: dark;
   --color-bg: hsl(300, 1%, 23%);
   --color-bg2: hsl(300, 1%, 12%);
-  --color-fg: white;
 }
 
 body {
@@ -26,9 +27,68 @@ body {
 
   display: flex;
   flex-flow: column nowrap;
+  justify-content: center;
   align-items: stretch;
   padding: 4px;
   gap: 4px;
+}
+
+.login {
+  display: flex;
+  flex-flow: column nowrap;
+  align-self: center;
+  gap: 0.125em 1em;
+}
+
+.login__error {
+  color: var(--color-error);
+}
+
+.login__row {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 0 0.5rem;
+}
+
+.login__field input {
+  margin-inline-start: auto;
+  width: 15rem;
+  box-sizing: border-box;
+}
+
+.login__field [name="password"]  {
+  width: 10rem;
+  box-sizing: border-box;
+}
+
+.login__password-toggle {
+  width: 4.5rem;
+  box-sizing: border-box;
+}
+
+.login__password-toggle input {
+  vertical-align: middle;
+}
+
+.login__actions {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 1ch;
+}
+
+.login__actions > * {
+  flex: 1 0 auto;
+}
+
+.disconnect {
+  position: fixed;
+  left: 4px;
+  bottom: 4px;
+  width: 1.25em;
+  height: 1.25em;
+  box-sizing: content-box;
+  padding: 0.25em;
 }
 
 .stats {
@@ -130,10 +190,10 @@ body {
   color: inherit;
 }
 .lag--warning {
-  color: #fb3;
+  color: var(--color-warning);
 }
 .lag--critical {
-  color: #f33;
+  color: var(--color-error);
 }
 
 .frames--dropped {

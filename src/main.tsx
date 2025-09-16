@@ -1,5 +1,5 @@
 import { render } from 'preact'
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState, type Dispatch, type StateUpdater } from 'preact/hooks';
 import { OBSWebSocket } from 'obs-websocket-js';
 import type { OBSResponseTypes, RequestBatchRequest, ResponseMessage } from 'obs-websocket-js';
 
@@ -23,6 +23,8 @@ interface State {
   status: Status | null;
   prevStatus: Status | null;
 };
+
+type ConnectionResult = [OBSWebSocket | null, string | null];
 
 // interface FrameOffset {
 //   renderSkippedFrames: number;
@@ -60,23 +62,180 @@ const outputNameMapping: Record<string, string> = {
 };
 
 const urlParams = new URLSearchParams(window.location.search);
-const address = urlParams.get('address') || 'localhost:4455';
-const password = urlParams.get('password') || '';
+const urlAddress = urlParams.get('address') ?? localStorage.getItem('address');
+const urlPassword = urlParams.get('password') ?? localStorage.getItem('password');
 const theme = urlParams.get('theme') || 'default';
 document.documentElement.classList.add(`theme-${theme}`);
 document.body.style.setProperty('--poll-interval', `${POLLING_INTERVAL}ms`);
 
-const obs = new OBSWebSocket();
-await obs.connect(`ws://${address}`, password);
+render(
+  <App
+    presetAddress={urlAddress}
+    presetPassword={urlPassword}
+  />,
+  document.body,
+);
 
-render((<App obs={obs} />), document.body);
+function App({
+  presetAddress,
+  presetPassword,
+}: {
+  presetAddress: string | null,
+  presetPassword: string | null,
+}) {
+  const shouldAutoConnect = presetAddress != null && presetPassword != null;
+  const [obs, setObs] = useState<OBSWebSocket | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [autoConnecting, setAutoConnecting] = useState(shouldAutoConnect);
 
-function App({ obs }: { obs: OBSWebSocket }) {
+  useEffect(() => {
+    if (shouldAutoConnect) {
+      login(presetAddress, presetPassword)
+        .then(([obs, err]) => {
+          setObs(obs);
+          setError(err);
+          setAutoConnecting(false);
+        });
+    }
+  }, [presetAddress, presetPassword]);
+
+  if (autoConnecting) {
+    return <></>;
+  }
+
+  return obs
+    ? <Dashboard
+      obs={obs}
+      setObs={setObs}
+    />
+    : <LoginForm
+      presetAddress={presetAddress}
+      presetPassword={presetPassword}
+      setObs={setObs}
+      error={error}
+      setError={setError}
+    />;
+}
+
+async function login(
+  address: string,
+  password: string,
+): Promise<ConnectionResult> {
+  const obs = new OBSWebSocket();
+  const addressUrl = new URL(address.includes('://') ? address : `ws://${address}`);
+  return await obs.connect(addressUrl.href, password || undefined)
+    .then((): ConnectionResult => {
+      localStorage.setItem('address', address);
+      localStorage.setItem('password', password);
+      obs.on('ConnectionClosed', async () => {
+        await delay(1000);
+        await obs.connect(addressUrl.href, password || undefined);
+      });
+      return [obs, null];
+    })
+    .catch(err => {
+      return [null, (err as Error).message];
+    });
+}
+
+function LoginForm({
+  presetAddress,
+  presetPassword,
+  setObs,
+  error,
+  setError,
+}: {
+  presetAddress: string | null,
+  presetPassword: string | null,
+  setObs: Dispatch<StateUpdater<OBSWebSocket | null>>,
+  error: string | null,
+  setError: Dispatch<StateUpdater<string | null>>,
+}) {
+  const [address, setAddress] = useState(presetAddress || 'localhost:4455');
+  const [password, setPassword] = useState(presetPassword || '');
+  const [showPassword, setShowPassword] = useState(false);
+
+  async function attemptLogin(e: Event) {
+    e.preventDefault();
+    await login(address, password)
+      .then(([obs, err]) => {
+        setObs(obs);
+        setError(err);
+      });
+  }
+  function forget() {
+    localStorage.removeItem('address');
+    localStorage.removeItem('password');
+    setAddress('');
+    setPassword('');
+  }
+
+  return (
+    <form class="login" onSubmit={attemptLogin}>
+      {error && <div class="login__error" role="alert">{error}</div>}
+      <label class="login__row login__field">
+        {'Address: '}
+        <input
+          type="text"
+          name="address"
+          value={address}
+          onInput={e => setAddress((e.target as HTMLInputElement).value)}
+        />
+      </label>
+      <br />
+      <div class="login__row">
+        <label class="login__field">
+          {'Password: '}
+          <input
+            type={showPassword ? 'text' : 'password'}
+            name="password"
+            value={password}
+            onInput={e => setPassword((e.target as HTMLInputElement).value)}
+          />
+        </label>
+        <label class="login__password-toggle">
+          {'Show: '}
+          <input
+            type="checkbox"
+            checked={showPassword}
+            onChange={e => setShowPassword((e.target as HTMLInputElement).checked)}
+          />
+        </label>
+      </div>
+      <br />
+      <div class="login__actions">
+        <button type="button" onClick={forget}>Forget</button>
+        <button type="submit">Connect</button>
+      </div>
+    </form>
+  )
+}
+
+function Dashboard({
+  obs,
+  setObs,
+}: {
+  obs: OBSWebSocket,
+  setObs: Dispatch<StateUpdater<OBSWebSocket | null>>,
+}) {
   const state = useStatus(obs);
+  function disconnect() {
+    obs.off('ConnectionClosed');
+    obs.disconnect();
+    setObs(null);
+  }
   return (
     <>
       <ObsStats stats={state.status?.stats || nullObsStatus} prevStats={state.prevStatus?.stats || null} />
       <OutputsTable outputs={state.status?.outputs || []} prevOutputs={state.prevStatus?.outputs || []} />
+      <button
+        class="disconnect"
+        onClick={disconnect}
+        aria-label={'Disconnect'}
+        title={'Disconnect'}
+      >
+        🔌
+      </button>
     </>
   );
 }
@@ -304,3 +463,6 @@ function parseOutputNames(
   return outputListResp.outputs.map(o => o.outputName as string);
 }
 
+async function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
