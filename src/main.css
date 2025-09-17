@@ -193,13 +193,13 @@ body {
   filter: grayscale(100%)
 }
 
-.lag--normal {
+.text--normal {
   color: inherit;
 }
-.lag--warning {
+.text--warning {
   color: var(--color-warning);
 }
-.lag--critical {
+.text--critical {
   color: var(--color-error);
 }
 

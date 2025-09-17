@@ -1,7 +1,7 @@
 import { fileSize } from 'humanize-plus';
 import update from 'immutability-helper';
 import { OBSWebSocket } from 'obs-websocket-js';
-import type { OBSResponseTypes, RequestBatchRequest, ResponseMessage } from 'obs-websocket-js';
+import type { OBSEventTypes, OBSResponseTypes, RequestBatchRequest, ResponseMessage } from 'obs-websocket-js';
 import { render } from 'preact'
 import { useEffect, useRef, useState, type Dispatch, type StateUpdater } from 'preact/hooks';
 
@@ -9,6 +9,7 @@ import './main.css'
 
 type ObsStatus = OBSResponseTypes['GetStats'];
 type OutputStatus = OBSResponseTypes['GetOutputStatus'];
+type VideoSettings = OBSResponseTypes['GetVideoSettings'];
 
 interface Output {
   name: string;
@@ -23,6 +24,7 @@ interface Status {
 interface State {
   status: Status | null;
   prevStatus: Status | null;
+  videoSettings: VideoSettings | null;
 };
 
 type ConnectionResult = [OBSWebSocket | null, string | null];
@@ -260,7 +262,11 @@ function Dashboard({
 
   return (
     <>
-      <ObsStats stats={adjustedStats} prevStats={adjustedPrevStats} />
+      <ObsStats
+        stats={adjustedStats}
+        prevStats={adjustedPrevStats}
+        videoSettings={state.videoSettings}
+      />
       <OutputsTable outputs={adjustedOutputs} prevOutputs={adjustedPrevOutputs} />
       <button
         class="disconnect"
@@ -383,25 +389,44 @@ function applyStatOffset(
 function ObsStats({
   stats,
   prevStats,
+  videoSettings,
 }: {
   stats: ObsStatus,
   prevStats: ObsStatus | null,
+  videoSettings: VideoSettings | null,
 }) {
   const cpuUsage = `${stats.cpuUsage.toPrecision(2)}%`;
   const memoryUsage = fileSize(stats.memoryUsage * 1024 * 1024);
   const diskSpace = fileSize(stats.availableDiskSpace * 1024 * 1024);
-  const fps = stats.activeFps.toFixed(2);
+
+  const fps = stats.activeFps;
+  const fpsStr = fps.toFixed(2);
+  const targetFps = videoSettings
+    ? videoSettings.fpsNumerator / videoSettings.fpsDenominator
+    : null;
+  const targetFpsStr = targetFps
+    ? targetFps.toFixed(2)
+    : '--';
+  const fpsClass = targetFps && fps < targetFps * 0.8
+    ? 'text--critical'
+    : targetFps && fps < targetFps * 0.9
+      ? 'text--warning'
+      : 'text--normal';
+
   const frametime = `${stats.averageFrameRenderTime.toPrecision(3)} ms`;
+
   const {
     counterText: renderFramesText,
     counterClass: renderFramesClass,
   } = frameCounter(stats.renderTotalFrames, stats.renderSkippedFrames);
+  const renderFramesDropped = !!prevStats && stats.renderSkippedFrames > prevStats.renderSkippedFrames;
+
   const {
     counterText: encodeFramesText,
     counterClass: encodeFramesClass,
   } = frameCounter(stats.outputTotalFrames, stats.outputSkippedFrames);
-  const renderFramesDropped = !!prevStats && stats.renderSkippedFrames > prevStats.renderSkippedFrames;
   const encodeFramesDropped = !!prevStats && stats.outputSkippedFrames > prevStats.outputSkippedFrames;
+
   return (
     <div class="stats">
       <section class="stats__section" aria-label="Resource Usage">
@@ -417,7 +442,7 @@ function ObsStats({
       </section>
       <section class="stats__section" aria-label="Performance">
         <div class="stat">
-          <span class="stat__name">FPS:</span> <span class="stat__value">{fps}</span>
+          <span class="stat__name">FPS:</span> <span class="stat__value"><span class={fpsClass}>{fpsStr}</span>/{targetFpsStr}</span>
         </div>
         <div class="stat">
           <span class="stat__name">Frametime:</span> <span class="stat__value">{frametime}</span>
@@ -544,8 +569,8 @@ function OutputStats({
 
 function frameCounter(totalFrames: number, skippedFrames: number) {
   const skippedRatio = totalFrames > 0 ? (skippedFrames / totalFrames) : 0;
-  const counterClass = skippedRatio > THRESHOLD_CRITICAL ? 'lag--critical' :
-    skippedRatio > THRESHOLD_WARNING ? 'lag--warning' : 'lag--normal';
+  const counterClass = skippedRatio > THRESHOLD_CRITICAL ? 'text--critical' :
+    skippedRatio > THRESHOLD_WARNING ? 'text--warning' : 'text--normal';
   const counterText = `${skippedFrames}/${totalFrames} (${(skippedRatio * 100).toFixed(1)}%)`;
   return { counterText, counterClass };
 }
@@ -556,11 +581,17 @@ function useStatus(obs: OBSWebSocket): State {
   const outputNames = useRef<string[]>([]);
   const [status, setStatus] = useState<Status | null>(null);
   const [prevStatus, setPrevStatus] = useState<Status | null>(null);
+  const [videoSettings, setVideoSettings] = useState<VideoSettings | null>(null);
+
   useEffect(() => {
     async function fetchStats() {
       if (outputNames.current.length === 0) {
         outputNames.current = parseOutputNames(await obs.call('GetOutputList'));
       }
+
+      // Ideally we wouldn't poll video settings on every interval, but
+      // unfortunately there's no event sent when users change frame rates via
+      // the settings menu.
       const outputRequests: RequestBatchRequest<'GetOutputStatus'>[] = outputNames.current
         .map(name => ({
           'requestType': 'GetOutputStatus',
@@ -568,13 +599,15 @@ function useStatus(obs: OBSWebSocket): State {
         }));
       const resp = await obs.callBatch([
         { 'requestType': 'GetOutputList' },
+        { 'requestType': 'GetVideoSettings' },
         { 'requestType': 'GetStats' },
         ...outputRequests,
       ]);
       const outputListResp = resp[0] as ResponseMessage<'GetOutputList'>;
-      const statsResp = resp[1] as ResponseMessage<'GetStats'>;
-      const outputStatusResps = resp.slice(2) as ResponseMessage<'GetOutputStatus'>[];
-      const state = {
+      const videoSettingsResp = resp[1] as ResponseMessage<'GetVideoSettings'>;
+      const statsResp = resp[2] as ResponseMessage<'GetStats'>;
+      const outputStatusResps = resp.slice(3) as ResponseMessage<'GetOutputStatus'>[];
+      const state: Status = {
         stats: statsResp.responseData,
         outputs: outputNames.current.map((name, i) => ({
           name,
@@ -589,6 +622,7 @@ function useStatus(obs: OBSWebSocket): State {
         setPrevStatus(previous);
         return state;
       });
+      setVideoSettings(videoSettingsResp.responseData);
       outputNames.current = parseOutputNames(outputListResp.responseData);
     }
     fetchStats();
@@ -596,7 +630,8 @@ function useStatus(obs: OBSWebSocket): State {
     return () => clearInterval(interval);
 
   }, [obs]);
-  return { status, prevStatus };
+
+  return { status, prevStatus, videoSettings };
 }
 
 function parseOutputNames(
