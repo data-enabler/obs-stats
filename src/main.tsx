@@ -1,7 +1,7 @@
 import { fileSize } from 'humanize-plus';
 import update from 'immutability-helper';
 import { OBSWebSocket } from 'obs-websocket-js';
-import type { OBSEventTypes, OBSResponseTypes, RequestBatchRequest, ResponseMessage } from 'obs-websocket-js';
+import type { OBSResponseTypes, RequestBatchRequest, ResponseMessage } from 'obs-websocket-js';
 import { render } from 'preact'
 import { useEffect, useRef, useState, type Dispatch, type StateUpdater } from 'preact/hooks';
 
