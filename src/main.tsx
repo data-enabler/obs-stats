@@ -397,7 +397,13 @@ function ObsStats({
 }) {
   const cpuUsage = `${stats.cpuUsage.toPrecision(2)}%`;
   const memoryUsage = fileSize(stats.memoryUsage * 1024 * 1024);
+
   const diskSpace = fileSize(stats.availableDiskSpace * 1024 * 1024);
+  const diskSpaceClass = stats.availableDiskSpace < 1024
+    ? 'text--critical'
+    : stats.availableDiskSpace < 5 * 1024
+      ? 'text--warning'
+      : 'text--normal';
 
   const fps = stats.activeFps;
   const fpsStr = fps.toFixed(2);
@@ -413,7 +419,14 @@ function ObsStats({
       ? 'text--warning'
       : 'text--normal';
 
-  const frametime = `${stats.averageFrameRenderTime.toPrecision(3)} ms`;
+  const frametime = stats.averageFrameRenderTime;
+  const frametimeStr = `${frametime.toPrecision(3)} ms`;
+  const targetFrametime = targetFps && 1000 / targetFps;
+  const frametimeClass = targetFrametime && frametime > targetFrametime
+    ? 'text--critical'
+    : targetFrametime && frametime > targetFrametime * 0.75
+      ? 'text--warning'
+      : 'text--normal';
 
   const {
     counterText: renderFramesText,
@@ -437,7 +450,7 @@ function ObsStats({
           <span class="stat__name">Mem:</span> <span class="stat__value">{memoryUsage}</span>
         </div>
         <div class="stat">
-          <span class="stat__name">Disk Space:</span> <span class="stat__value">{diskSpace}</span>
+          <span class="stat__name">Disk Space:</span> <span class={`stat__value ${diskSpaceClass}`}>{diskSpace}</span>
         </div>
       </section>
       <section class="stats__section" aria-label="Performance">
@@ -445,7 +458,7 @@ function ObsStats({
           <span class="stat__name">FPS:</span> <span class="stat__value"><span class={fpsClass}>{fpsStr}</span>/{targetFpsStr}</span>
         </div>
         <div class="stat">
-          <span class="stat__name">Frametime:</span> <span class="stat__value">{frametime}</span>
+          <span class="stat__name">Frametime:</span> <span class={`stat__value ${frametimeClass}`}>{frametimeStr}</span>
         </div>
         <div class="stats__group">
           <div class={`stat ${renderFramesDropped ? 'frames--dropped' : ''}`}>
