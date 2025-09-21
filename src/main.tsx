@@ -192,7 +192,6 @@ function LoginForm({
           onInput={e => setAddress((e.target as HTMLInputElement).value)}
         />
       </label>
-      <br />
       <div class="login__row">
         <label class="login__field">
           {'Password: '}
@@ -212,7 +211,6 @@ function LoginForm({
           />
         </label>
       </div>
-      <br />
       <div class="login__actions">
         <button type="button" onClick={forget}>Forget</button>
         <button type="submit">Connect</button>
@@ -231,13 +229,13 @@ function Dashboard({
   const state = useStatus(obs);
   const [offset, setOffset] = useState<FrameOffset>(nullFrameOffset);
 
-  function disconnect() {
+  function onDisconnect() {
     obs.off('ConnectionClosed');
     obs.disconnect();
     setObs(null);
   }
 
-  function reset() {
+  function onReset() {
     setOffset({
       renderSkippedFrames: state.status?.stats.renderSkippedFrames || 0,
       renderTotalFrames: state.status?.stats.renderTotalFrames || 0,
@@ -268,22 +266,7 @@ function Dashboard({
         videoSettings={state.videoSettings}
       />
       <OutputsTable outputs={adjustedOutputs} prevOutputs={adjustedPrevOutputs} />
-      <button
-        class="disconnect"
-        onClick={disconnect}
-        aria-label={'Disconnect'}
-        title={'Disconnect'}
-      >
-        🔌
-      </button>
-      <button
-        class="reset"
-        onClick={reset}
-        aria-label={'Reset'}
-        title={'Reset'}
-      >
-        🔄
-      </button>
+      <Controls onDisconnect={onDisconnect} onReset={onReset} />
     </>
   );
 }
@@ -386,6 +369,35 @@ function applyStatOffset(
   return { adjustedStats, adjustedPrevStats, adjustedOutputs, adjustedPrevOutputs };
 }
 
+function Controls({
+  onDisconnect,
+  onReset,
+}: {
+  onDisconnect: () => void,
+  onReset: () => void,
+}) {
+  return (
+    <div class="controls">
+      <button
+        class="controls__button reset"
+        onClick={onReset}
+        aria-label={'Reset'}
+        title={'Reset'}
+      >
+        🔄
+      </button>
+      <button
+        class="controls__button disconnect"
+        onClick={onDisconnect}
+        aria-label={'Disconnect'}
+        title={'Disconnect'}
+      >
+        🔌
+      </button>
+    </div>
+  );
+}
+
 function ObsStats({
   stats,
   prevStats,
@@ -443,7 +455,7 @@ function ObsStats({
   return (
     <div class="stats">
       <section class="stats__section" aria-label="Resource Usage">
-        <div class="stat">
+        <div class="stat stats__cpu">
           <span class="stat__name">CPU:</span> <span class="stat__value">{cpuUsage}</span>
         </div>
         <div class="stat">
@@ -455,18 +467,22 @@ function ObsStats({
       </section>
       <section class="stats__section" aria-label="Performance">
         <div class="stat">
-          <span class="stat__name">FPS:</span> <span class="stat__value"><span class={fpsClass}>{fpsStr}</span>/{targetFpsStr}</span>
+          <span class="stat__name">FPS:</span>
+          {' '}
+          <span class="stat__value"><span class={fpsClass}>{fpsStr}</span><wbr />/{targetFpsStr}</span>
         </div>
         <div class="stat">
-          <span class="stat__name">Frametime:</span> <span class={`stat__value ${frametimeClass}`}>{frametimeStr}</span>
+          <span class="stat__name">Frametime:</span>
+          {' '}
+          <span class={`stat__value ${frametimeClass}`}>{frametimeStr}</span>
         </div>
         <div class="stats__group">
-          <div class={`stat ${renderFramesDropped ? 'frames--dropped' : ''}`}>
+          <div class={`stat stat__frames-missed ${renderFramesDropped ? 'frames--dropped' : ''}`}>
             <span class="stat__name">Render frames missed:</span>
             {' '}
             <span class={`stat__value ${renderFramesClass}`}>{renderFramesText}</span>
           </div>
-          <div class={`stat ${encodeFramesDropped ? 'frames--dropped' : ''}`}>
+          <div class={`stat stat__frames-missed ${encodeFramesDropped ? 'frames--dropped' : ''}`}>
             <span class="stat__name">Encoding frames missed:</span>
             {' '}
             <span class={`stat__value ${encodeFramesClass}`}>{encodeFramesText}</span>
@@ -584,7 +600,8 @@ function frameCounter(totalFrames: number, skippedFrames: number) {
   const skippedRatio = totalFrames > 0 ? (skippedFrames / totalFrames) : 0;
   const counterClass = skippedRatio > THRESHOLD_CRITICAL ? 'text--critical' :
     skippedRatio > THRESHOLD_WARNING ? 'text--warning' : 'text--normal';
-  const counterText = `${skippedFrames}/${totalFrames} (${(skippedRatio * 100).toFixed(1)}%)`;
+  const percentage = (skippedRatio * 100).toFixed(1);
+  const counterText = <>{skippedFrames}<wbr />/{totalFrames} ({percentage}%)</>;
   return { counterText, counterClass };
 }
 
