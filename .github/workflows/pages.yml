@@ -1,0 +1,42 @@
+name: Deploy to GitHub Pages
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  id-token: write
+  pages: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release asset
+        uses: robinraju/release-downloader@v1
+        with:
+          releaseId: ${{ github.event.release.id }}
+          fileName: "*"
+      - name: List Directory Files
+        run: ls -laR
+        shell: bash
+      - name: Rename
+        run: mv obs-stats.html index.html
+      - name: Set up Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: .
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
