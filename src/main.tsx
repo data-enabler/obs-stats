@@ -17,6 +17,7 @@ interface Output {
 };
 
 interface Status {
+  counter: number;
   stats: ObsStatus;
   outputs: Output[];
 };
@@ -264,6 +265,7 @@ function Dashboard({
         stats={adjustedStats}
         prevStats={adjustedPrevStats}
         videoSettings={state.videoSettings}
+        counter={state.status?.counter ?? 0}
       />
       <OutputsTable outputs={adjustedOutputs} prevOutputs={adjustedPrevOutputs} />
       <Controls onDisconnect={onDisconnect} onReset={onReset} />
@@ -402,10 +404,12 @@ function ObsStats({
   stats,
   prevStats,
   videoSettings,
+  counter,
 }: {
   stats: ObsStatus,
   prevStats: ObsStatus | null,
   videoSettings: VideoSettings | null,
+  counter: number,
 }) {
   const cpuUsage = `${stats.cpuUsage.toPrecision(2)}%`;
   const memoryUsage = fileSize(stats.memoryUsage * 1024 * 1024);
@@ -445,13 +449,25 @@ function ObsStats({
     counterClass: renderFramesClass,
   } = frameCounter(stats.renderTotalFrames, stats.renderSkippedFrames);
   const renderFramesDropped = !!prevStats && stats.renderSkippedFrames > prevStats.renderSkippedFrames;
+  const renderFramesDiff = renderFramesDropped
+    ? `+${stats.renderSkippedFrames - prevStats.renderSkippedFrames}`
+    : '';
 
   const {
     counterText: encodeFramesText,
     counterClass: encodeFramesClass,
   } = frameCounter(stats.outputTotalFrames, stats.outputSkippedFrames);
   const encodeFramesDropped = !!prevStats && stats.outputSkippedFrames > prevStats.outputSkippedFrames;
+  const encodeFramesDiff = encodeFramesDropped
+    ? `+${stats.outputSkippedFrames - prevStats.outputSkippedFrames}`
+    : '';
 
+  const renderFrameDropClass = renderFramesDropped
+    ? (counter % 2 ? 'frames--dropped-tick' : 'frames--dropped-tock')
+    : '';
+  const encodeFrameDropClass = encodeFramesDropped
+    ? (counter % 2 ? 'frames--dropped-tick' : 'frames--dropped-tock')
+    : '';
   return (
     <div class="stats">
       <section class="stats__section" aria-label="Resource Usage">
@@ -477,15 +493,21 @@ function ObsStats({
           <span class={`stat__value ${frametimeClass}`}>{frametimeStr}</span>
         </div>
         <div class="stats__group">
-          <div class={`stat stat__frames-missed ${renderFramesDropped ? 'frames--dropped' : ''}`}>
+          <div class={`stat stat__frames-missed ${renderFrameDropClass}`}>
             <span class="stat__name">Render frames missed:</span>
             {' '}
-            <span class={`stat__value ${renderFramesClass}`}>{renderFramesText}</span>
+            <span class={`stat__value ${renderFramesClass}`}>
+              <span class="stat__value__diff">{renderFramesDiff}</span>
+              {renderFramesText}
+            </span>
           </div>
-          <div class={`stat stat__frames-missed ${encodeFramesDropped ? 'frames--dropped' : ''}`}>
+          <div class={`stat stat__frames-missed ${encodeFrameDropClass}`}>
             <span class="stat__name">Encoding frames missed:</span>
             {' '}
-            <span class={`stat__value ${encodeFramesClass}`}>{encodeFramesText}</span>
+            <span class={`stat__value ${encodeFramesClass}`}>
+              <span class="stat__value__diff">{encodeFramesDiff}</span>
+              {encodeFramesText}
+            </span>
           </div>
         </div>
       </section>
@@ -612,6 +634,7 @@ function useStatus(obs: OBSWebSocket): State {
   const changingScenes = useRef<boolean>(false);
   const changingProfiles = useRef<boolean>(false);
   const exiting = useRef<boolean>(false);
+  const counter = useRef<number>(0);
   const [status, setStatus] = useState<Status | null>(null);
   const [prevStatus, setPrevStatus] = useState<Status | null>(null);
   const [videoSettings, setVideoSettings] = useState<VideoSettings | null>(null);
@@ -652,6 +675,7 @@ function useStatus(obs: OBSWebSocket): State {
       const statsResp = resp.shift() as ResponseMessage<'GetStats'>;
       const outputStatusResps = resp as ResponseMessage<'GetOutputStatus'>[];
       const state: Status = {
+        counter: counter.current++,
         stats: statsResp.responseData,
         outputs: outputNames.current.map((name, i) => ({
           name,

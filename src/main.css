@@ -193,10 +193,21 @@ body {
 
 .stat__value {
   display: inline-block;
+  position: relative;
 }
 
 .stats__cpu .stat__value {
   min-width: 5ch;
+}
+
+.stat__value__diff {
+  position: absolute;
+  top: -1.25cap;
+  left: 0;
+
+  color: var(--color-error);
+  text-shadow: 1px 1px 1px black;
+  opacity: 0;
 }
 
 .outputs {
@@ -318,13 +329,47 @@ body {
   text-shadow: 1px 1px 1px black;
 }
 
-.frames--dropped {
-  animation: frames-dropped var(--poll-interval) ease-out infinite;
+.frames--dropped-tick, .frames--dropped-tock {
+  animation: frames-dropped-tick calc(var(--poll-interval)*0.95) ease-out 1;
+}
+.frames--dropped-tock {
+  animation-name: frames-dropped-tock;
 }
 
-@keyframes frames-dropped {
+@keyframes frames-dropped-tick {
   from {
     background-color: #700;
+  }
+}
+@keyframes frames-dropped-tock {
+  from {
+    background-color: #700;
+  }
+}
+
+.frames--dropped-tick .stat__value__diff, .frames--dropped-tock .stat__value__diff {
+  animation: frames-dropped-diff-tick calc(var(--poll-interval)*0.95) linear 1;
+}
+.frames--dropped-tock .stat__value__diff {
+  animation-name: frames-dropped-diff-tock;
+}
+
+@keyframes frames-dropped-diff-tick {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-3cap);
+  }
+}
+@keyframes frames-dropped-diff-tock {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-3cap);
   }
 }
 
