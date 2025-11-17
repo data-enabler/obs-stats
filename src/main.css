@@ -1,5 +1,6 @@
 :root {
   font-family: system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
   background-color: var(--color-bg);
   color: var(--color-fg);
 }
@@ -178,9 +179,15 @@ body {
 }
 
 .stat {
+  display: flex;
   flex: 1 0 0;
   min-width: fit-content;
+
   padding: 0.1em 0.5em;
+  flex-flow: row wrap;
+  gap: 0 1em;
+  justify-content: space-between;
+
   background-color: var(--color-bg2);
 }
 
@@ -304,9 +311,11 @@ body {
 }
 .text--warning {
   color: var(--color-warning);
+  text-shadow: 1px 1px 1px black;
 }
 .text--critical {
   color: var(--color-error);
+  text-shadow: 1px 1px 1px black;
 }
 
 .frames--dropped {
@@ -315,7 +324,7 @@ body {
 
 @keyframes frames-dropped {
   from {
-    background-color: #400;
+    background-color: #700;
   }
 }
 
