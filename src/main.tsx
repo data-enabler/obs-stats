@@ -609,6 +609,9 @@ function useStatus(obs: OBSWebSocket): State {
   // We can't get the outputlist and status in one batch call, so keep track of
   // the output names from the last request
   const outputNames = useRef<string[]>([]);
+  const changingScenes = useRef<boolean>(false);
+  const changingProfiles = useRef<boolean>(false);
+  const exiting = useRef<boolean>(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [prevStatus, setPrevStatus] = useState<Status | null>(null);
   const [videoSettings, setVideoSettings] = useState<VideoSettings | null>(null);
@@ -621,7 +624,15 @@ function useStatus(obs: OBSWebSocket): State {
 
       // Ideally we wouldn't poll video settings on every interval, but
       // unfortunately there's no event sent when users change frame rates via
-      // the settings menu.
+      // the settings menu. At the same time, polling video stats during certain
+      // OBS operations (e.g. changing scene collections or shutting down) has a
+      // tendency to cause OBS to crash, so we want to avoid that.
+      const shouldPollVideoSettings = !changingScenes.current
+        && !changingProfiles.current
+        && !exiting.current;
+      const videoSettingsRequest: RequestBatchRequest<'GetVideoSettings'>[] = shouldPollVideoSettings
+        ? [{ 'requestType': 'GetVideoSettings' }]
+        : [];
       const outputRequests: RequestBatchRequest<'GetOutputStatus'>[] = outputNames.current
         .map(name => ({
           'requestType': 'GetOutputStatus',
@@ -629,14 +640,17 @@ function useStatus(obs: OBSWebSocket): State {
         }));
       const resp = await obs.callBatch([
         { 'requestType': 'GetOutputList' },
-        { 'requestType': 'GetVideoSettings' },
+        ...videoSettingsRequest,
         { 'requestType': 'GetStats' },
         ...outputRequests,
       ]);
-      const outputListResp = resp[0] as ResponseMessage<'GetOutputList'>;
-      const videoSettingsResp = resp[1] as ResponseMessage<'GetVideoSettings'>;
-      const statsResp = resp[2] as ResponseMessage<'GetStats'>;
-      const outputStatusResps = resp.slice(3) as ResponseMessage<'GetOutputStatus'>[];
+      const outputListResp = resp.shift() as ResponseMessage<'GetOutputList'>;
+      if (shouldPollVideoSettings) {
+        const videoSettingsResp = resp.shift() as ResponseMessage<'GetVideoSettings'>;
+        setVideoSettings(videoSettingsResp.responseData);
+      }
+      const statsResp = resp.shift() as ResponseMessage<'GetStats'>;
+      const outputStatusResps = resp as ResponseMessage<'GetOutputStatus'>[];
       const state: Status = {
         stats: statsResp.responseData,
         outputs: outputNames.current.map((name, i) => ({
@@ -652,12 +666,43 @@ function useStatus(obs: OBSWebSocket): State {
         setPrevStatus(previous);
         return state;
       });
-      setVideoSettings(videoSettingsResp.responseData);
       outputNames.current = parseOutputNames(outputListResp.responseData);
     }
+
     fetchStats();
     const interval = setInterval(fetchStats, POLLING_INTERVAL);
-    return () => clearInterval(interval);
+
+    obs.addListener('CurrentSceneCollectionChanging', () => {
+      console.log('Scene collection changing');
+      changingScenes.current = true;
+    });
+    obs.addListener('CurrentSceneCollectionChanged', () => {
+      console.log('Scene collection changed');
+      changingScenes.current = false;
+    });
+    obs.addListener('CurrentProfileChanging', () => {
+      console.log('Profile changing');
+      changingProfiles.current = true;
+    });
+    obs.addListener('CurrentProfileChanged', () => {
+      console.log('Profile changed');
+      changingProfiles.current = false;
+    });
+    obs.addListener('ExitStarted', () => {
+      console.log('Exit started');
+      exiting.current = true;
+    });
+    obs.addListener('ConnectionOpened', () => {
+      console.log('Connection opened');
+      changingScenes.current = false;
+      changingProfiles.current = false;
+      exiting.current = false;
+    });
+
+    return () => {
+      clearInterval(interval)
+      obs.removeAllListeners();
+    };
 
   }, [obs]);
 
@@ -665,8 +710,11 @@ function useStatus(obs: OBSWebSocket): State {
 }
 
 function parseOutputNames(
-  outputListResp: OBSResponseTypes['GetOutputList'],
+  outputListResp: OBSResponseTypes['GetOutputList'] | undefined,
 ): string[] {
+  if (!outputListResp) {
+    return [];
+  }
   return outputListResp.outputs.map(o => o.outputName as string);
 }
 
